@@ -1,0 +1,161 @@
+public class Form16CSVComparator {
+
+    // Invocable Request Wrapper
+    public class CSVComparisonRequest {
+        @InvocableVariable(required=true)
+        public String csvData;
+    }
+
+    // Invocable Response Wrapper
+    public class CSVComparisonResponse {
+        @InvocableVariable
+        public List<CSVComparisonResult> mismatches;
+    }
+
+    // Invocable-Compatible Comparison Result
+    public class CSVComparisonResult {
+        @InvocableVariable
+        public String employeeCode;
+
+        @InvocableVariable
+        public List<KeyValuePair> mismatchedFields;
+    }
+
+    // Key-value replacement for Map<String, String>
+    public class KeyValuePair {
+        @InvocableVariable
+        public String fieldName;
+
+        @InvocableVariable
+        public String mismatchDetail;
+    }
+
+    @InvocableMethod(label='Compare Form16 CSV with Records' description='Compares a CSV against Form16_File__c records and returns mismatches.')
+    public static List<CSVComparisonResponse> compare(List<CSVComparisonRequest> requests) {
+        List<CSVComparisonResponse> responseList = new List<CSVComparisonResponse>();
+        List<CSVComparisonResult> results = new List<CSVComparisonResult>();
+
+        if (requests.isEmpty() || String.isBlank(requests[0].csvData)) {
+            CSVComparisonResponse emptyResponse = new CSVComparisonResponse();
+            emptyResponse.mismatches = results;
+            responseList.add(emptyResponse);
+            return responseList;
+        }
+
+        String csvData = requests[0].csvData;
+        List<String> lines = csvData.split('\n');
+
+        if (lines.isEmpty()) {
+            CSVComparisonResponse emptyResponse = new CSVComparisonResponse();
+            emptyResponse.mismatches = results;
+            responseList.add(emptyResponse);
+            return responseList;
+        }
+
+        List<String> headers = parseCSVLine(lines[0]);
+
+        for (Integer i = 1; i < lines.size(); i++) {
+            String line = lines[i];
+            List<String> values = parseCSVLine(line);
+            if (values.size() != headers.size()) continue;
+
+            Map<String, String> csvRow = new Map<String, String>();
+            for (Integer j = 0; j < headers.size(); j++) {
+                csvRow.put(headers[j], values[j]);
+            }
+
+            String employeeCode = csvRow.get('Employee Code');
+            if (String.isBlank(employeeCode)) continue;
+
+            List<Form16_File__c> existingRecords = [
+                SELECT
+                    Assessment_Year_c, Basic_Salaryc, Bonusc, Cess_c, CurrencyIsoCode,
+                    Designation_c, Employee_Codec, Employee_Namec, Employee_PAN_c,
+                    Employer_Address_c, Employer_Namec, Employer_PANc, Employer_TAN_c,
+                    Name, Gross_Salary_c, HRAc, HRA_Exemptionc, Income_Taxc, LTA_c,
+                    Period_From_c, Period_Toc, Professional_Taxc, Refund_Due_c,
+                    Section_80C_c, Section_80Dc, Special_Allowancec, Standard_Deduction_c,
+                    TDS_Deducted_c, Total_Deductionsc, Total_Tax_Payable_c
+                FROM Form16_File__c
+                WHERE Employee_Code__c = :employeeCode
+                LIMIT 1
+            ];
+
+            if (existingRecords.isEmpty()) continue;
+            Form16_File__c existingRecord = existingRecords[0];
+
+            CSVComparisonResult result = new CSVComparisonResult();
+            result.employeeCode = employeeCode;
+            result.mismatchedFields = new List<KeyValuePair>();
+
+            compareField(result, 'Assessment Year', existingRecord.Assessment_Year__c, csvRow.get('Assessment Year'));
+            compareField(result, 'Basic Salary', String.valueOf(existingRecord.Basic_Salary__c), csvRow.get('Basic Salary'));
+            compareField(result, 'Bonus', String.valueOf(existingRecord.Bonus__c), csvRow.get('Bonus'));
+            compareField(result, 'Cess', String.valueOf(existingRecord.Cess__c), csvRow.get('Cess'));
+            compareField(result, 'Currency', existingRecord.CurrencyIsoCode, csvRow.get('Currency'));
+            compareField(result, 'Designation', existingRecord.Designation__c, csvRow.get('Designation'));
+            compareField(result, 'Employee Name', existingRecord.Employee_Name__c, csvRow.get('Employee Name'));
+            compareField(result, 'Employee PAN', existingRecord.Employee_PAN__c, csvRow.get('Employee PAN'));
+            compareField(result, 'Employer Address', existingRecord.Employer_Address__c, csvRow.get('Employer Address'));
+            compareField(result, 'Employer Name', existingRecord.Employer_Name__c, csvRow.get('Employer Name'));
+            compareField(result, 'Employer PAN', existingRecord.Employer_PAN__c, csvRow.get('Employer PAN'));
+            compareField(result, 'Employer TAN', existingRecord.Employer_TAN__c, csvRow.get('Employer TAN'));
+            compareField(result, 'Form16_File', existingRecord.Name, csvRow.get('Form16_File'));
+            compareField(result, 'Gross Salary', String.valueOf(existingRecord.Gross_Salary__c), csvRow.get('Gross Salary'));
+            compareField(result, 'HRA', String.valueOf(existingRecord.HRA__c), csvRow.get('HRA'));
+            compareField(result, 'HRA Exemption', String.valueOf(existingRecord.HRA_Exemption__c), csvRow.get('HRA Exemption'));
+            compareField(result, 'Income Tax', String.valueOf(existingRecord.Income_Tax__c), csvRow.get('Income Tax'));
+            compareField(result, 'LTA', String.valueOf(existingRecord.LTA__c), csvRow.get('LTA'));
+            compareField(result, 'Period From', String.valueOf(existingRecord.Period_From__c), csvRow.get('Period From'));
+            compareField(result, 'Period To', String.valueOf(existingRecord.Period_To__c), csvRow.get('Period To'));
+            compareField(result, 'Professional Tax', String.valueOf(existingRecord.Professional_Tax__c), csvRow.get('Professional Tax'));
+            compareField(result, 'Refund Due', String.valueOf(existingRecord.Refund_Due__c), csvRow.get('Refund Due'));
+            compareField(result, 'Section 80C', String.valueOf(existingRecord.Section_80C__c), csvRow.get('Section 80C'));
+            compareField(result, 'Section 80D', String.valueOf(existingRecord.Section_80D__c), csvRow.get('Section 80D'));
+            compareField(result, 'Special Allowance', String.valueOf(existingRecord.Special_Allowance__c), csvRow.get('Special Allowance'));
+            compareField(result, 'Standard Deduction', String.valueOf(existingRecord.Standard_Deduction__c), csvRow.get('Standard Deduction'));
+            compareField(result, 'TDS Deducted', String.valueOf(existingRecord.TDS_Deducted__c), csvRow.get('TDS Deducted'));
+            compareField(result, 'Total Deductions', String.valueOf(existingRecord.Total_Deductions__c), csvRow.get('Total Deductions'));
+            compareField(result, 'Total Tax Payable', String.valueOf(existingRecord.Total_Tax_Payable__c), csvRow.get('Total Tax Payable'));
+
+            if (!result.mismatchedFields.isEmpty()) {
+                results.add(result);
+            }
+        }
+
+        CSVComparisonResponse fullResponse = new CSVComparisonResponse();
+        fullResponse.mismatches = results;
+        responseList.add(fullResponse);
+        return responseList;
+    }
+
+    private static void compareField(CSVComparisonResult result, String fieldName, String orgValue, String csvValue) {
+        if (orgValue == null) orgValue = '';
+        if (csvValue == null) csvValue = '';
+        if (orgValue.trim() != csvValue.trim()) {
+            KeyValuePair kv = new KeyValuePair();
+            kv.fieldName = fieldName;
+            kv.mismatchDetail = 'Expected: ' + orgValue + ', Found: ' + csvValue;
+            result.mismatchedFields.add(kv);
+        }
+    }
+
+    private static List<String> parseCSVLine(String line) {
+        List<String> result = new List<String>();
+        Boolean insideQuotes = false;
+        String current = '';
+        for (Integer i = 0; i < line.length(); i++) {
+            String c = line.substring(i, i+1);
+            if (c == '"') {
+                insideQuotes = !insideQuotes;
+            } else if (c == ',' && !insideQuotes) {
+                result.add(current);
+                current = '';
+            } else {
+                current += c;
+            }
+        }
+        result.add(current);
+        return result;
+    }
+}
